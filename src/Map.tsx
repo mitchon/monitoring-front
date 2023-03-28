@@ -1,6 +1,6 @@
-import React, {useState} from 'react';
-import Leaflet, {LatLng, LatLngBounds} from 'leaflet';
-import {MapContainer, TileLayer, Popup, Rectangle, Polyline} from "react-leaflet";
+import React, {useEffect, useRef, useState} from 'react';
+import Leaflet, {LatLng, LatLngBounds, LeafletMouseEvent} from 'leaflet';
+import {MapContainer, TileLayer, Popup, Rectangle, Polyline, useMapEvents, Marker, MarkerProps} from "react-leaflet";
 import CSS from "csstype";
 import 'leaflet/dist/leaflet.css';
 import useWebSocket from "react-use-websocket";
@@ -41,11 +41,17 @@ function Map() {
     const northWestBound = new LatLng(position.lat + 0.07 / 2, position.lng + 0.07)
     const maxBounds = new LatLngBounds(southEastBound, northWestBound)
     const mapStyle: CSS.Properties = {width: '100%', height: '90vh' }
+
     const [map, setMap] = useState<Leaflet.Map | null>(null)
     const [requestResponse, setRequestResponse] = useState<RequestResponse | undefined>(undefined)
     const [roadways, setRoadways] = useState<Array<ILink>>([])
+    const [exactWay, setExactWay] = useState<Array<ILink>>([])
     const [start, setStart] = useState<string>("")
     const [finish, setFinish] = useState<string>("")
+    const [pickedLocation, setPickedLocation] = useState<Location | null>(null)
+
+    const [refReady, setRefReady] = useState(false);
+    let popupRef = useRef<Leaflet.Popup | null>(null);
 
     // useWebSocket("ws://localhost:8080/socket", {
     //     onOpen: () => console.log('opened'),
@@ -79,15 +85,56 @@ function Map() {
         axios.get(api + "/graph/dijkstra/" + start + "/" + finish)
             .then((response: AxiosResponse) => {
                 console.log(response.data)
-                setRoadways(response.data)
+                setExactWay(response.data)
             }).catch((error: AxiosError) => {
             console.log(error)
+            setStart("")
+            setFinish("")
         })
     }
 
-    function parseLocation (location: Location): LatLng {
+    const parseLocation = (location: Location): LatLng => {
         return new LatLng(location.latitude, location.longitude)
     }
+
+    useEffect(() => {
+        setPickedLocation(null)
+        if (start !== "" && finish !== "") {
+            GetRoute()
+            setStart("")
+            setFinish("")
+        }
+    }, [start, finish])
+
+    function Clicks() {
+        useMapEvents({
+            click(e: LeafletMouseEvent) {
+                const point = roadways.map( (link: ILink): {distance: number; point: Location} => {
+                    const point = parseLocation(link.start)
+                    return {
+                        distance: e.latlng.distanceTo(point),
+                        point: link.start
+                    }
+                }).sort((a: { distance: number; point: Location; }, b: { distance: number; point: Location; }): number => {
+                    if (a.distance > b.distance)
+                        return 1
+                    if (b.distance > a.distance)
+                        return -1
+                    return 0
+                })[0]
+                setPickedLocation(point.point)
+            }
+        })
+
+        return null
+    }
+
+    useEffect(() => {
+        if (refReady && map) {
+            popupRef.current?.openOn(map);
+        }
+    }, [refReady, map]);
+
 
     return (
         <div>
@@ -101,22 +148,7 @@ function Map() {
             >
                 Get Full Graph!
             </button>
-            <input
-                type="number"
-                value={start}
-                onChange={e => setStart(e.target.value)}
-            />
-            <input
-                type="number"
-                value={finish}
-                onChange={e => setFinish(e.target.value)}
-            />
-            <button
-                onClick={GetRoute}
-            >
-                Get Route!
-            </button>
-            <MapContainer ref={setMap} center={position} zoom={16} minZoom={15} style={mapStyle} maxBounds={ maxBounds }>
+            <MapContainer ref={setMap} center={position} zoom={16} minZoom={14.5} style={mapStyle} maxBounds={ maxBounds }>
                 <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
@@ -125,14 +157,48 @@ function Map() {
                     roadways.map(roadway => {
                         return (
                             <Polyline
+                                opacity = {0.3}
                                 key = {roadway.start.id.toString() + roadway.finish.id.toString()}
                                 positions = { [parseLocation(roadway.start), parseLocation(roadway.finish)] }
-                            >
-                                <Popup>
-                                    {roadway.start.id.toString() + ", " + roadway.finish.id.toString()}
-                                </Popup>
-                            </Polyline>)
+                             />
+                        )
                     })
+                }
+                {
+                    exactWay.map(roadway => {
+                        return (
+                            <Polyline
+                                color = {"red"}
+                                key = {roadway.start.id.toString() + roadway.finish.id.toString()}
+                                positions = { [parseLocation(roadway.start), parseLocation(roadway.finish)] }
+                            />
+                        )
+                    })
+                }
+                <Clicks></Clicks>
+                { pickedLocation ?
+                    <Marker position = {parseLocation(pickedLocation)}>
+                        <Popup
+                            ref={(r) => {
+                                popupRef.current = r;
+                                setRefReady(true);
+                            }}
+                        >
+                            <button onClick={(e) => {
+                                setStart(pickedLocation.id.toString())
+                                setRefReady(false)
+                            }}>
+                                From
+                            </button>
+                            <button onClick={(e) => {
+                                setFinish(pickedLocation.id.toString())
+                                setRefReady(false)
+                            }}>
+                                To
+                            </button>
+                        </Popup>
+                    </Marker>
+                    : null
                 }
             </MapContainer>
         </div>
