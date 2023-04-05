@@ -38,7 +38,7 @@ function Map() {
     const [exactWay, setExactWay] = useState<Array<ILink>>([])
     const [start, setStart] = useState<string>("")
     const [finish, setFinish] = useState<string>("")
-    const [pickedLocations, setPickedLocations] = useState<Array<Location>>([])
+    const [markers, setMarkers] = useState<Array<[Location, string]>>([])
 
     // useWebSocket("ws://localhost:8080/socket", {
     //     onOpen: () => console.log('opened'),
@@ -62,11 +62,11 @@ function Map() {
             .then((response: AxiosResponse) => {
                 console.log(response.data)
                 setExactWay(response.data)
+                setStart("")
+                setFinish("")
+                setMarkers([])
             }).catch((error: AxiosError) => {
             console.log(error)
-            setStart("")
-            setFinish("")
-            setPickedLocations([])
         })
     }
 
@@ -103,13 +103,7 @@ function Map() {
                         return -1
                     return 0
                 })[0]
-                setPickedLocations((current: Array<Location>) => {
-                    if (current.length >= 2) {
-                        return [current[1], point.point]
-                    }
-                    else
-                        return [...current, point.point]
-                })
+                setMarkers(current => [...current, [point.point, ""]])
             }
         })
 
@@ -138,6 +132,7 @@ function Map() {
                         return (
                             <Polyline
                                 color = {"red"}
+                                weight = {5}
                                 key = {roadway.start.id.toString() + roadway.finish.id.toString()}
                                 positions = { [parseLocation(roadway.start), parseLocation(roadway.finish)] }
                             />
@@ -146,19 +141,16 @@ function Map() {
                 }
                 <Clicks></Clicks>
                 {
-                    pickedLocations.map( pickedLocation => {
+                    markers.map( (marker, index) => {
+                        const pickedLocation = marker[0]
                         return (
-                            <CustomMarker map={map!!} position = {pickedLocation} key={pickedLocation.id} isActive>
+                            <CustomMarker map={map!!} position = {pickedLocation} key={pickedLocation.id + index} isActive>
                                 <button onClick={(e) => {
-                                    if (start !== "")
-                                        setPickedLocations([pickedLocation])
                                     setStart(pickedLocation.id.toString())
                                 }}>
                                     From
                                 </button>
                                 <button onClick={(e) => {
-                                    if (finish !== "")
-                                        setPickedLocations([pickedLocation])
                                     setFinish(pickedLocation.id.toString())
                                 }}>
                                     To
