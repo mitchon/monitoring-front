@@ -35,7 +35,8 @@ function Map() {
     const [map, setMap] = useState<Leaflet.Map | null>(null)
     const [requestResponse, setRequestResponse] = useState<RequestResponse | undefined>(undefined)
     const [roadways, setRoadways] = useState<Array<ILink>>([])
-    const [exactWay, setExactWay] = useState<Array<ILink>>([])
+    const [exactWayDefault, setExactWayDefault] = useState<Array<ILink>>([])
+    const [exactWaySafeSpace, setExactWaySafeSpace] = useState<Array<ILink>>([])
     const [start, setStart] = useState<string>("")
     const [finish, setFinish] = useState<string>("")
     const [markers, setMarkers] = useState<Array<[Location, string]>>([])
@@ -58,13 +59,20 @@ function Map() {
     }
 
     const GetRoute = () => {
-        axios.get(api + "/graph/dijkstra/" + start + "/" + finish)
-            .then((response: AxiosResponse) => {
-                console.log(response.data)
-                setExactWay(response.data)
+        axios.get(api + "/graph/route/" + start + "/" + finish + "/a-star/default")
+            .then((firstResponse: AxiosResponse) => {
+                console.log(firstResponse.data)
+                setExactWayDefault(firstResponse.data)
                 setStart("")
                 setFinish("")
                 setMarkers([])
+                axios.get(api + "/graph/route/" + start + "/" + finish + "/a-star/safe-space")
+                    .then((secondResponse: AxiosResponse) => {
+                        console.log(secondResponse.data)
+                        setExactWaySafeSpace(secondResponse.data)
+                    }).catch((error: AxiosError) => {
+                    console.log(error)
+                })
             }).catch((error: AxiosError) => {
             console.log(error)
         })
@@ -128,10 +136,22 @@ function Map() {
                     })
                 }
                 {
-                    exactWay.map(roadway => {
+                    exactWayDefault.map(roadway => {
                         return (
                             <Polyline
                                 color = {"red"}
+                                weight = {5}
+                                key = {roadway.start.id.toString() + roadway.finish.id.toString()}
+                                positions = { [parseLocation(roadway.start), parseLocation(roadway.finish)] }
+                            />
+                        )
+                    })
+                }
+                {
+                    exactWaySafeSpace.map(roadway => {
+                        return (
+                            <Polyline
+                                color = {"green"}
                                 weight = {5}
                                 key = {roadway.start.id.toString() + roadway.finish.id.toString()}
                                 positions = { [parseLocation(roadway.start), parseLocation(roadway.finish)] }
